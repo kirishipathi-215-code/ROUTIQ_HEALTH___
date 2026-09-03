@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// ==========================================
+// 1. USER JOURNEY DOMAIN
+// ==========================================
+
+model User {
+  id        String   @id @default(cuid())
+  role      String   @default("PATIENT") // PATIENT, AMBULANCE_HELPER, ADMIN
+  name      String?
+  phone     String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patientProfile PatientProfile?
+  careJourneys   CareJourney[]
+  aiInteractions AIInteraction[]
+}
+
+model PatientProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  age       Int?
+  gender    String?
+  bloodGroup String?
+  history   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CareJourney {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  type            String   // NORMAL, EMERGENCY
+  status          String   // ACTIVE, COMPLETED, CANCELLED
+  originalRequest String?
+  detectedNeed    String?
+  facilityId      String?
+  facility        Facility? @relation(fields: [facilityId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  steps           CareJourneyStep[]
+  doctorAdvice    DoctorAdvice[]
+  followUps       FollowUp[]
+}
+
+model CareJourneyStep {
+  id            String   @id @default(cuid())
+  careJourneyId String
+  careJourney   CareJourney @relation(fields: [careJourneyId], references: [id])
+  stepName      String
+  status        String   // PENDING, IN_PROGRESS, COMPLETED
+  completedAt   DateTime?
+  createdAt     DateTime @default(now())
+}
+
+model DoctorAdvice {
+  id            String   @id @default(cuid())
+  careJourneyId String
+  careJourney   CareJourney @relation(fields: [careJourneyId], references: [id])
+  originalText  String
+  summary       String?
+  date          DateTime @default(now())
+}
+
+model FollowUp {
+  id            String   @id @default(cuid())
+  careJourneyId String
+  careJourney   CareJourney @relation(fields: [careJourneyId], references: [id])
+  description   String
+  scheduledDate DateTime
+  status        String   // PENDING, COMPLETED, MISSED
+}
+
+// ==========================================
+// 2. HEALTHCARE RESOURCE DOMAIN
+// ==========================================
+
+model Facility {
+  id             String   @id @default(cuid())
+  name           String
+  type           String   // PHC, CHC, DISTRICT_HOSPITAL, MEDICAL_COLLEGE, PRIVATE, LAB, PHARMACY
+  publicPrivate  String   // PUBLIC, PRIVATE
+  address        String
+  district       String
+  latitude       Float
+  longitude      Float
+  
+  // Capabilities
+  emergencyCare  Boolean  @default(false)
+  traumaCare     Boolean  @default(false)
+  icu            Boolean  @default(false)
+  bloodBank      Boolean  @default(false)
+  oxygen         Boolean  @default(false)
+  surgery        Boolean  @default(false)
+  
+  availabilityStatus String @default("AVAILABLE") // AVAILABLE, FULL, UNAVAILABLE
+  operatingHours     String?
+  contact            String?
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  careJourneys   CareJourney[]
+}
+
+// ==========================================
+// 3. AI INTELLIGENCE DOMAIN
+// ==========================================
+
+model AIInteraction {
+  id               String   @id @default(cuid())
+  userId           String?
+  user             User?    @relation(fields: [userId], references: [id])
+  timestamp        DateTime @default(now())
+  language         String
+  inputType        String   // VOICE, TEXT
+  originalTranscript String
+  mode             String   // NORMAL, EMERGENCY
+  processingStatus String   // SUCCESS, FAILED
+  
+  extractions      AIExtraction[]
+}
+
+model AIExtraction {
+  id              String   @id @default(cuid())
+  interactionId   String
+  interaction     AIInteraction @relation(fields: [interactionId], references: [id])
+  intent          String
+  structuredOutput String   // JSON stringified
+  confidence      Float
+  createdAt       DateTime @default(now())
+}
