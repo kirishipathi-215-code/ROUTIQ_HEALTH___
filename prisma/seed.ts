@@ -89,6 +89,18 @@ async function main() {
       name: 'Ramesh Patil',
       role: 'PATIENT',
       phone: '9876543210',
+      patientProfile: {
+        create: { age: 35, gender: 'Male', bloodGroup: 'O+', history: 'None' }
+      }
+    }
+  })
+
+  // Create a demo user (Ambulance Helper)
+  await prisma.user.create({
+    data: {
+      name: 'Santosh EMS',
+      role: 'AMBULANCE_HELPER',
+      phone: '1111111111',
     }
   })
 
@@ -96,12 +108,12 @@ async function main() {
   await prisma.user.create({
     data: {
       name: 'System Admin',
-      role: 'ADMIN',
-      phone: 'admin',
+      role: 'PLATFORM_ADMIN',
+      phone: '0000000000',
     }
   })
 
-  console.log('Database seeded with Demo Facilities!')
+  console.log('Database seeded with Demo Facilities and Users!')
 }
 
 main()

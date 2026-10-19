@@ -3,141 +3,303 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
-// ==========================================
-// 1. USER JOURNEY DOMAIN
-// ==========================================
-
 model User {
-  id        String   @id @default(cuid())
-  role      String   @default("PATIENT") // PATIENT, AMBULANCE_HELPER, ADMIN
-  name      String?
-  phone     String?  @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  patientProfile PatientProfile?
-  careJourneys   CareJourney[]
-  aiInteractions AIInteraction[]
+  id              String           @id @default(cuid())
+  healthId        String?          @unique
+  role            String           @default("PATIENT") // PATIENT, HOSPITAL_STAFF, GOVERNMENT_HEALTH_AUTHORITY, PLATFORM_ADMIN, AMBULANCE_HELPER
+  name            String?
+  phone           String           @unique
+  password        String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  aiInteractions  AIInteraction[]
+  careJourneys    CareJourney[]
+  emergencyEvents EmergencyEvent[]
+  patientProfile  PatientProfile?
+  auditLogs       AuditLog[]
 }
 
 model PatientProfile {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id])
-  age       Int?
-  gender    String?
-  bloodGroup String?
-  history   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  healthId           String?  @unique
+  age                Int?
+  gender             String?
+  bloodGroup         String?
+  history            String?
+  existingConditions String?
+  allergies          String?
+  medications        String?
+  previousSurgeries  String?
+  emergencyContact   String?
+  preferredLanguage  String?  @default("en")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id])
 }
 
 model CareJourney {
-  id              String   @id @default(cuid())
+  id              String            @id @default(cuid())
   userId          String
-  user            User     @relation(fields: [userId], references: [id])
-  type            String   // NORMAL, EMERGENCY
-  status          String   // ACTIVE, COMPLETED, CANCELLED
+  type            String
+  status          String
   originalRequest String?
   detectedNeed    String?
   facilityId      String?
-  facility        Facility? @relation(fields: [facilityId], references: [id])
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  facility        Facility?         @relation(fields: [facilityId], references: [id])
+  user            User              @relation(fields: [userId], references: [id])
   steps           CareJourneyStep[]
   doctorAdvice    DoctorAdvice[]
   followUps       FollowUp[]
+  medicalReports  MedicalReport[]
+  notifications   Notification[]
+  referrals       Referral[]
 }
 
 model CareJourneyStep {
-  id            String   @id @default(cuid())
+  id            String      @id @default(cuid())
   careJourneyId String
-  careJourney   CareJourney @relation(fields: [careJourneyId], references: [id])
   stepName      String
-  status        String   // PENDING, IN_PROGRESS, COMPLETED
+  status        String
   completedAt   DateTime?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime    @default(now())
+  careJourney   CareJourney @relation(fields: [careJourneyId], references: [id])
+}
+
+model EmergencyEvent {
+  id            String               @id @default(cuid())
+  userId        String
+  incidentType  String
+  consciousness String
+  bleeding      String
+  breathing     String
+  urgency       String
+  facilityId    String?
+  distanceKm    Float?
+  etaMins       Int?
+  startTime     DateTime             @default(now())
+  arrivalTime   DateTime?
+  status        String
+  assessmentId  String?              @unique
+  assessment    EmergencyAssessment? @relation(fields: [assessmentId], references: [id])
+  facility      Facility?            @relation(fields: [facilityId], references: [id])
+  user          User                 @relation(fields: [userId], references: [id])
+  handover      EmergencyHandover?
+}
+
+model EmergencyHandover {
+  id                     String         @id @default(cuid())
+  emergencyEventId       String         @unique
+  emergencyEvent         EmergencyEvent @relation(fields: [emergencyEventId], references: [id])
+  healthId               String
+  patientName            String?
+  age                    Int?
+  incidentType           String
+  consciousness          String
+  bleeding               String
+  breathing              String
+  requiredCare           String
+  recommendedFacilityId  String?
+  relevantMedicalHistory String?
+  allergies              String?
+  status                 String         @default("TRANSMITTED") // QUEUED, TRANSMITTED, HANDED_OVER
+  createdAt              DateTime       @default(now())
+  handedOverAt           DateTime?
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  userRole   String
+  action     String   // VIEW_PATIENT_SUMMARY, UPDATE_HEALTH_HISTORY, GOV_ANALYTICS_VIEW, ADMIN_ACCESS
+  recordType String   // HEALTH_RECORD, EMERGENCY_EVENT, FACILITY, SYSTEM
+  recordId   String?  // Health ID or Resource ID
+  status     String   @default("SUCCESS") // SUCCESS, DENIED, FAILED
+  details    String?  // Non-sensitive operational metadata only
+  timestamp  DateTime @default(now())
 }
 
 model DoctorAdvice {
-  id            String   @id @default(cuid())
+  id            String      @id @default(cuid())
   careJourneyId String
-  careJourney   CareJourney @relation(fields: [careJourneyId], references: [id])
   originalText  String
   summary       String?
-  date          DateTime @default(now())
+  date          DateTime    @default(now())
+  careJourney   CareJourney @relation(fields: [careJourneyId], references: [id])
 }
 
 model FollowUp {
-  id            String   @id @default(cuid())
+  id            String      @id @default(cuid())
   careJourneyId String
-  careJourney   CareJourney @relation(fields: [careJourneyId], references: [id])
   description   String
   scheduledDate DateTime
-  status        String   // PENDING, COMPLETED, MISSED
+  status        String
+  careJourney   CareJourney @relation(fields: [careJourneyId], references: [id])
 }
 
-// ==========================================
-// 2. HEALTHCARE RESOURCE DOMAIN
-// ==========================================
+model Referral {
+  id            String      @id @default(cuid())
+  careJourneyId String
+  referredTo    String
+  reason        String
+  createdAt     DateTime    @default(now())
+  careJourney   CareJourney @relation(fields: [careJourneyId], references: [id])
+}
+
+model MedicalReport {
+  id            String      @id @default(cuid())
+  careJourneyId String
+  reportType    String
+  fileUrl       String?
+  createdAt     DateTime    @default(now())
+  careJourney   CareJourney @relation(fields: [careJourneyId], references: [id])
+}
+
+model Notification {
+  id            String      @id @default(cuid())
+  careJourneyId String
+  message       String
+  isRead        Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  careJourney   CareJourney @relation(fields: [careJourneyId], references: [id])
+}
 
 model Facility {
-  id             String   @id @default(cuid())
-  name           String
-  type           String   // PHC, CHC, DISTRICT_HOSPITAL, MEDICAL_COLLEGE, PRIVATE, LAB, PHARMACY
-  publicPrivate  String   // PUBLIC, PRIVATE
-  address        String
-  district       String
-  latitude       Float
-  longitude      Float
-  
-  // Capabilities
-  emergencyCare  Boolean  @default(false)
-  traumaCare     Boolean  @default(false)
-  icu            Boolean  @default(false)
-  bloodBank      Boolean  @default(false)
-  oxygen         Boolean  @default(false)
-  surgery        Boolean  @default(false)
-  
-  availabilityStatus String @default("AVAILABLE") // AVAILABLE, FULL, UNAVAILABLE
+  id                 String                 @id @default(cuid())
+  name               String
+  nameHi             String?
+  nameMr             String?
+  nameTa             String?
+  type               String
+  publicPrivate      String
+  address            String
+  addressHi          String?
+  addressMr          String?
+  addressTa          String?
+  district           String
+  latitude           Float
+  longitude          Float
+  emergencyCare      Boolean                @default(false)
+  traumaCare         Boolean                @default(false)
+  icu                Boolean                @default(false)
+  bloodBank          Boolean                @default(false)
+  oxygen             Boolean                @default(false)
+  surgery            Boolean                @default(false)
+  availabilityStatus String                 @default("AVAILABLE")
   operatingHours     String?
   contact            String?
-  
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  careJourneys   CareJourney[]
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  careJourneys       CareJourney[]
+  emergencyEvents    EmergencyEvent[]
+  availabilities     FacilityAvailability[]
+  locations          FacilityLocation[]
+  resources          FacilityResource[]
+  laboratories       Laboratory[]
+  pharmacies         Pharmacy[]
+  specialists        Specialist[]
 }
 
-// ==========================================
-// 3. AI INTELLIGENCE DOMAIN
-// ==========================================
+model FacilityResource {
+  id           String   @id @default(cuid())
+  facilityId   String
+  resourceName String
+  quantity     Int
+  updatedAt    DateTime @updatedAt
+  facility     Facility @relation(fields: [facilityId], references: [id])
+}
+
+model FacilityAvailability {
+  id          String   @id @default(cuid())
+  facilityId  String
+  status      String
+  lastChecked DateTime @default(now())
+  facility    Facility @relation(fields: [facilityId], references: [id])
+}
+
+model Specialist {
+  id          String   @id @default(cuid())
+  facilityId  String
+  name        String
+  specialty   String
+  isAvailable Boolean  @default(true)
+  facility    Facility @relation(fields: [facilityId], references: [id])
+}
+
+model Laboratory {
+  id         String   @id @default(cuid())
+  facilityId String
+  name       String
+  testTypes  String
+  facility   Facility @relation(fields: [facilityId], references: [id])
+}
+
+model Pharmacy {
+  id             String   @id @default(cuid())
+  facilityId     String
+  name           String
+  inventoryLevel String
+  facility       Facility @relation(fields: [facilityId], references: [id])
+}
+
+model FacilityLocation {
+  id         String   @id @default(cuid())
+  facilityId String
+  building   String
+  floor      String
+  ward       String?
+  facility   Facility @relation(fields: [facilityId], references: [id])
+}
 
 model AIInteraction {
-  id               String   @id @default(cuid())
-  userId           String?
-  user             User?    @relation(fields: [userId], references: [id])
-  timestamp        DateTime @default(now())
-  language         String
-  inputType        String   // VOICE, TEXT
+  id                 String            @id @default(cuid())
+  userId             String?
+  timestamp          DateTime          @default(now())
+  language           String
+  inputType          String
   originalTranscript String
-  mode             String   // NORMAL, EMERGENCY
-  processingStatus String   // SUCCESS, FAILED
-  
-  extractions      AIExtraction[]
+  mode               String
+  processingStatus   String
+  extractions        AIExtraction[]
+  user               User?             @relation(fields: [userId], references: [id])
+  logs               AIProcessingLog[]
 }
 
 model AIExtraction {
-  id              String   @id @default(cuid())
-  interactionId   String
-  interaction     AIInteraction @relation(fields: [interactionId], references: [id])
-  intent          String
-  structuredOutput String   // JSON stringified
-  confidence      Float
-  createdAt       DateTime @default(now())
+  id               String        @id @default(cuid())
+  interactionId    String
+  intent           String
+  structuredOutput String
+  confidence       Float
+  createdAt        DateTime      @default(now())
+  interaction      AIInteraction @relation(fields: [interactionId], references: [id])
+}
+
+model HealthcareIntent {
+  id          String @id @default(cuid())
+  intentName  String @unique
+  description String
+}
+
+model EmergencyAssessment {
+  id             String          @id @default(cuid())
+  assessmentData String
+  createdAt      DateTime        @default(now())
+  event          EmergencyEvent?
+}
+
+model AIProcessingLog {
+  id            String        @id @default(cuid())
+  interactionId String
+  logMessage    String
+  createdAt     DateTime      @default(now())
+  interaction   AIInteraction @relation(fields: [interactionId], references: [id])
 }
